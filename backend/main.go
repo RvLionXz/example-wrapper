@@ -8,20 +8,38 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
-var clientKeys = map[string]bool{
-	"supersecret-client-key-123": true,
-	"another-client-key-456":     true,
+// --- Structs untuk Format OpenAI (Request dari Client) ---
+
+type OpenAIRequest struct {
+	Model    string          `json:"model"`
+	Messages []OpenAIMessage `json:"messages"`
 }
 
-var geminiAPIKey string
-
-const geminiAPIURL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key="
-
-type ClientRequest struct {
-	Prompt string `json:"prompt"`
+type OpenAIMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
+
+// --- Structs untuk Format OpenAI (Response ke Client) ---
+
+type OpenAIResponse struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+}
+
+type Choice struct {
+	Index        int           `json:"index"`
+	Message      OpenAIMessage `json:"message"`
+	FinishReason string        `json:"finish_reason"`
+}
+
+// --- Structs Internal untuk Komunikasi dengan Google Gemini ---
 
 type GeminiRequest struct {
 	Contents []Content `json:"contents"`
@@ -45,75 +63,104 @@ type GeminiResponse struct {
 	} `json:"candidates"`
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		clientKey := r.Header.Get("X-Client-Api-Key")
-		if _, valid := clientKeys[clientKey]; !valid {
-			http.Error(w, "Unauthorized: API Key tidak valid atau tidak ada.", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	}
-}
+// --- FUNGSI WRAPPER UTAMA (PENERJEMAH) ---
 
-func handleGeminiRequest(w http.ResponseWriter, r *http.Request) {
-	var clientReq ClientRequest
-	if err := json.NewDecoder(r.Body).Decode(&clientReq); err != nil {
-		http.Error(w, "Bad Request: Gagal membaca JSON.", http.StatusBadRequest)
-		return
+func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, error) {
+	// 1. Ekstrak prompt dari format OpenAI.
+	// Untuk simulasi ini, kita ambil konten dari pesan terakhir.
+	var prompt string
+	if len(request.Messages) > 0 {
+		prompt = request.Messages[len(request.Messages)-1].Content
 	}
-	if clientReq.Prompt == "" {
-		http.Error(w, "Bad Request: Field 'prompt' tidak boleh kosong.", http.StatusBadRequest)
-		return
+	if prompt == "" {
+		return nil, fmt.Errorf("prompt tidak boleh kosong")
 	}
 
-	geminiReq := GeminiRequest{
-		Contents: []Content{
+	// 2. Buat dan kirim request ke API Gemini (logika ini tetap sama).
+	geminiReqBody, err := json.Marshal(GeminiRequest{
+		Contents: []Content{{Parts: []Part{{Text: prompt}}}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gagal marshal request ke gemini: %w", err)
+	}
+
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(geminiReqBody))
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengirim request ke gemini: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gemini merespons dengan error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var geminiResp GeminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		return nil, fmt.Errorf("gagal decode respons dari gemini: %w", err)
+	}
+
+	// 3. Terjemahkan respons dari format Gemini ke format OpenAI.
+	var responseText string
+	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
+		responseText = geminiResp.Candidates[0].Content.Parts[0].Text
+	}
+
+	openAIResp := OpenAIResponse{
+		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()), // Buat ID dummy
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   request.Model, // Kembalikan nama model yang diminta client
+		Choices: []Choice{
 			{
-				Parts: []Part{
-					{Text: clientReq.Prompt},
+				Index: 0,
+				Message: OpenAIMessage{
+					Role:    "assistant",
+					Content: responseText,
 				},
+				FinishReason: "stop",
 			},
 		},
 	}
 
-	reqBody, err := json.Marshal(geminiReq)
-	if err != nil {
-		http.Error(w, "Internal Server Error: Gagal membuat request body.", http.StatusInternalServerError)
+	return &openAIResp, nil
+}
+
+// --- HTTP Handlers ---
+
+func handleChatRequest(w http.ResponseWriter, r *http.Request) {
+	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
+
+	var openAIReq OpenAIRequest
+	if err := json.NewDecoder(r.Body).Decode(&openAIReq); err != nil {
+		http.Error(w, "Bad Request: Gagal membaca JSON.", http.StatusBadRequest)
 		return
 	}
 
-	fullURL := geminiAPIURL + geminiAPIKey
-	resp, err := http.Post(fullURL, "application/json", bytes.NewBuffer(reqBody))
+	finalResp, err := chatCompletion(openAIReq, geminiAPIKey)
 	if err != nil {
-		http.Error(w, "Internal Server Error: Gagal menghubungi API Gemini.", http.StatusInternalServerError)
+		log.Printf("Error dari fungsi chatCompletion: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	defer resp.Body.Close()
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	json.NewEncoder(w).Encode(finalResp)
 }
 
-func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Status: OK. Gemini Wrapper Backend is running.")
-}
+// --- MAIN FUNCTION ---
 
 func main() {
-	geminiAPIKey = os.Getenv("GEMINI_API_KEY")
-	if geminiAPIKey == "" {
+	if os.Getenv("GEMINI_API_KEY") == "" {
 		log.Fatal("Error: Environment variable GEMINI_API_KEY tidak di-set.")
 	}
 
-	http.HandleFunc("/", handleHealthCheck)
-	http.HandleFunc("/api/generate", authMiddleware(handleGeminiRequest))
+	http.HandleFunc("/v1/chat/completions", handleChatRequest)
 
 	port := "8080"
-	log.Printf("Server berjalan di port %s...", port)
-	log.Println("Endpoint GET: http://localhost:8080/")
-	log.Println("Endpoint POST: http://localhost:8080/api/generate")
+	log.Printf("Server Simulasi OpenAI (v4) berjalan di port %s...", port)
+	log.Println("Endpoint: POST http://localhost:8080/v1/chat/completions")
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("Gagal menjalankan server: %v", err)
 	}

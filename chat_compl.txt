@@ -1,0 +1,202 @@
+async fn call_openai_chat_completions(
+    api_key: &str,
+    request: &ChatCompletionsRequest,
+) -> Result<reqwest::Response, String> {
+    log_request("ChatCompletions", &request.model, "Calling OpenAI Chat Completions API");
+    
+    let client = reqwest::Client::new();
+   
+    println!("req from client: {:?}", request);
+
+    let response = client
+        .post("https://api.openai.com/v1/chat/completions")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(request)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    let status = response.status();
+    log_response("ChatCompletions", &status.to_string(), "Received response from OpenAI");
+    
+    if status.is_success() {
+        Ok(response)
+    } else {
+        let response_text = response.text().await.map_err(|e| format!("Error reading response: {}", e))?;
+        // Try to parse as error response
+        match serde_json::from_str::<ApiError>(&response_text) {
+            Ok(error_response) => {
+                let error_msg = format!("API Error: {}", error_response.error.message);
+                log_error("ChatCompletions", &error_msg);
+                Err(error_msg)
+            }
+            Err(_) => {
+                let error_msg = format!("HTTP Error {}: {}", status, response_text);
+                log_error("ChatCompletions", &error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+}
+
+async fn openai_chat_completion_endpoint(
+    Json(request): Json<EndpointRequest>,
+) -> Result<Json<ChatCompletionResponse>, String> {
+    log_message("Received request on /openai-chat-completion endpoint");
+    
+    // Log the request for debugging
+    log_message(&format!("Request payload: {:?}", request));
+    println!("get payload from client:  {:?}", request);
+
+    /*
+    from python:
+    {'model': 'gpt-4o-mini', 'messages'
+: '[{"role": "user", "content": "what model are you ?"}]', '
+temperature': 0.7, 'max_tokens': 100}
+    
+
+    * */
+
+    /*
+    EndpointRequest { 
+        model: Some("gpt-4o-mini"), 
+        input: None, 
+        file_path: None, 
+        purpose: None, 
+        messages: Some(String("[{\"role\": \"user\", \"content\": \"what model are you ?\"}]")), stream: false, extra: {"max_tokens": Number(100), "temperature": Number(0.7)} }
+    * */
+
+    
+
+    // Use provided model or default to gpt-4o-mini
+    let model = request.model.clone().unwrap_or("gpt-4o-mini".to_string());
+    
+    // Determine provider based on model name
+    let provider = match model.as_str() {
+        "gpt-4o" | "gpt-4o-mini" | "gpt-4-turbo" | "gpt-4-turbo-preview" | "gpt-4" | "gpt-4-32k" |
+        "gpt-3.5-turbo" | "gpt-3.5-turbo-16k" | "gpt-3.5-turbo-instruct" |
+        "text-davinci-003" | "code-davinci-002" |
+        "text-embedding-3-small" | "text-embedding-3-large" | "text-embedding-ada-002" => "openai",
+        
+        "claude-3-5-sonnet-20241022" | "claude-3-5-sonnet-20240620" |
+        "claude-3-opus-20240229" | "claude-3-sonnet-20240229" | "claude-3-haiku-20240307" |
+        "claude-2.1" | "claude-2.0" | "claude-instant-1.2" => "anthropic",
+        
+        "gemini-1.5-pro" | "gemini-1.5-flash" |
+        "gemini-pro" | "gemini-pro-vision" |
+        "gemini-ultra" | "gemini-1.0-ultra" |
+        "text-bison" | "chat-bison" | "codechat-bison" => "gemini",
+        
+        _ => "openai", // Default to OpenAI
+    };
+    
+    // Get API key from environment variable
+    let api_key = get_api_key(provider)?;
+    
+    // Extract messages from request
+    let messages = match request.messages {
+        Some(Value::Array(arr)) => {
+            arr.into_iter()
+                .map(|msg| {
+                    if let (Some(role), content_val) = (
+                        msg.get("role").and_then(|r| r.as_str()),
+                        msg.get("content"),
+                    ) {
+                        OpenAIMessage {
+                            role: role.to_string(),
+                            content: content_val.unwrap_or(&Value::String("".to_string())).clone(),
+                        }
+                    } else {
+                        OpenAIMessage {
+                            role: "user".to_string(),
+                            content: msg,
+                        }
+                    }
+                })
+                .collect()
+        }
+        Some(Value::Object(obj)) => {
+            vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: Value::Object(obj),
+            }]
+        }
+        // Handle the case where messages is a JSON string
+        Some(Value::String(json_str)) => {
+            // Parse the JSON string into a Value
+            match serde_json::from_str(&json_str) {
+                Ok(Value::Array(arr)) => {
+                    // Process as array of messages
+                    arr.into_iter()
+                        .map(|msg| {
+                            if let (Some(role), content_val) = (
+                                msg.get("role").and_then(|r| r.as_str()),
+                                msg.get("content"),
+                            ) {
+                                OpenAIMessage {
+                                    role: role.to_string(),
+                                    content: content_val.unwrap_or(&Value::String("".to_string())).clone(),
+                                }
+                            } else {
+                                OpenAIMessage {
+                                    role: "user".to_string(),
+                                    content: msg,
+                                }
+                            }
+                        })
+                        .collect()
+                }
+                Ok(Value::Object(obj)) => {
+                    vec![OpenAIMessage {
+                        role: "user".to_string(),
+                        content: Value::Object(obj),
+                    }]
+                }
+                _ => {
+                    // Default to using the string as content
+                    vec![OpenAIMessage {
+                        role: "user".to_string(),
+                        content: Value::String(json_str),
+                    }]
+                }
+            }
+        }
+        _ => {
+            // Default to empty message if none provided
+            vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: Value::String("".to_string()),
+            }]
+        }
+    };
+    
+    // Create the OpenAI request
+
+    let openai_request = ChatCompletionsRequest {
+        model,
+        messages,
+        stream: None, // Non-streaming endpoint
+        extra_params: request.extra,
+    };
+    println!("===>request to openai: {:?}", openai_request);
+
+    /*
+    ChatCompletionsRequest { 
+        model: "gpt-4o-mini", 
+        messages: [OpenAIMessage { 
+            role: "user", 
+            content: String("") }], 
+        stream: None, extra_params: {"max_tokens": Number(100), "temperature": Number(0.7)} }
+    * */
+
+
+    log_message("Calling OpenAI Chat Completions API from /openai-chat-completion endpoint");
+    let response = call_openai_chat_completions(&api_key, &openai_request).await?;
+    let response_text = response.text().await.map_err(|e| format!("Error reading response: {}", e))?;
+    let openai_response: ChatCompletionResponse = serde_json::from_str(&response_text)
+        .map_err(|e| format!("Error parsing response: {}", e))?;
+    
+    log_message("Successfully completed /openai-chat-completion endpoint");
+    Ok(Json(openai_response))
+}

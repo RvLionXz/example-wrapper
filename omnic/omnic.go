@@ -13,13 +13,22 @@ type Client struct {
 	httpClient *http.Client
 }
 
+
+
 func NewClient(baseURL, apiKey string) *Client {
+
 	return &Client{
 		baseURL:    baseURL,
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
 	}
+	
 }
+
+
+
+
+
 
 type backendRequest struct {
 	Prompt string `json:"prompt"`
@@ -41,7 +50,7 @@ type backendResponse struct {
 	Candidates []Candidate `json:"candidates"`
 }
 
-// NAMA FUNGSI DIPERBAIKI: GenerateContent
+
 func (c *Client) GenerateContent(prompt string) (string, error) {
 	reqData := backendRequest{Prompt: prompt}
 	jsonBody, err := json.Marshal(reqData)

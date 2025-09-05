@@ -1,19 +1,20 @@
-# Proyek Wrapper API Gemini dengan Go
+# Proyek Wrapper API Gemini (Format OpenAI)
 
 ## Ringkasan
 
-Proyek ini adalah sebuah contoh lengkap tentang cara membuat server backend dengan bahasa Go yang berfungsi sebagai "wrapper" atau "proxy" yang aman untuk Google Gemini API. Tujuannya adalah untuk menyembunyikan API Key Gemini utama di sisi server dan memberikan API key yang berbeda kepada client.
+Versi terbaru dari proyek ini berfungsi sebagai **server proxy yang meniru antarmuka (interface) dari OpenAI API**, namun di belakang layar tetap menggunakan Google Gemini sebagai model pemrosesnya. Tujuannya adalah untuk menyediakan sebuah "gerbang tunggal" dengan format API yang standar dan populer (OpenAI) untuk berinteraksi dengan berbagai model AI.
 
 Proyek ini terdiri dari tiga komponen utama:
 
-1.  **Backend**: Sebuah server HTTP yang menerima permintaan dari client, menambahkan API Key Gemini, meneruskan permintaan ke Google, dan mengembalikan responsnya.
-2.  **Omnic Library**: Sebuah library Go (`wrapper`) yang memudahkan interaksi dengan server backend kita.
-3.  **Example Client**: Sebuah program Go sederhana yang menunjukkan cara menggunakan library `omnic`.
+1.  **Backend**: Server HTTP yang menerima request dalam format OpenAI, "menerjemahkannya" untuk Gemini, mengirim request ke Google, lalu "menerjemahkan" kembali responsnya ke format OpenAI sebelum dikirim ke client.
+2.  **Omnic Library**: Library Go (`wrapper`) yang akan kita sesuaikan untuk berinteraksi dengan backend baru ini.
+3.  **Example Client**: Program Go sederhana untuk menunjukkan cara menggunakan library `omnic`.
 
 ---
 
 ## Struktur Proyek
 
+Struktur folder tidak berubah:
 ```
 goclientside/
 ├── backend/              # Folder berisi kode server backend
@@ -23,135 +24,82 @@ goclientside/
 ├── example-client/       # Folder berisi contoh program client
 │   └── main.go
 ├── go.mod                # File utama untuk manajemen modul Go
-├── go.sum
 └── README.md             # Dokumentasi ini
 ```
 
 ---
 
-## Persyaratan
-
--   Bahasa Go (versi 1.21 atau lebih baru direkomendasikan).
--   API Key dari Google AI Studio (untuk Gemini).
-
----
-
 ## Cara Menjalankan Proyek
-
-Ikuti langkah-langkah ini dari awal untuk menjalankan keseluruhan proyek.
 
 ### 1. Konfigurasi Modul Go
 
-Proyek ini menggunakan Go Modules untuk mengelola dependensi dan paket lokal. Jika Anda memulai dari awal, Anda perlu menginisialisasi modul dan memberitahu Go di mana menemukan library `omnic` lokal kita.
+(Langkah ini tidak perlu diulangi jika sudah dilakukan sebelumnya)
+Pastikan file `go.mod` di root proyek Anda berisi baris berikut:
+```mod
+module goclientside
 
-*   Buka terminal di direktori root proyek (`goclientside`).
-*   Inisialisasi modul:
-    ```sh
-    go mod init goclientside
-    ```
-*   Tambahkan referensi untuk library `omnic` lokal:
-    ```sh
-    go mod edit -replace=goclientside/omnic=./omnic
-    ```
+replace goclientside/omnic => ./omnic
+```
 
 ### 2. Menjalankan Backend Server
 
-Server backend harus dijalankan terlebih dahulu.
-
 1.  **Buka Terminal 1**.
 2.  Pindah ke direktori `backend`:
-    ```sh
-    cd backend
-    ```
-3.  Set environment variable untuk API Key Gemini Anda. Ganti `YOUR_GEMINI_API_KEY` dengan key Anda yang sebenarnya.
-    *   Di PowerShell (Windows):
-        ```powershell
-        $env:GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-        ```
-    *   Di bash (Linux/macOS):
-        ```sh
-        export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
-        ```
+    `cd backend`
+3.  Set environment variable untuk API Key Gemini Anda:
+    *   Di PowerShell: `$env:GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
+    *   Di bash: `export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
 4.  Jalankan server:
-    ```sh
-    go run main.go
-    ```
-5.  Biarkan terminal ini berjalan. Anda akan melihat log bahwa server aktif di port 8080.
-
-### 3. Menjalankan Example Client
-
-Setelah backend berjalan, buka terminal baru untuk menjalankan client.
-
-1.  **Buka Terminal 2**.
-2.  Pindah ke direktori `example-client`:
-    ```sh
-    cd example-client
-    ```
-3.  Jalankan program client:
-    ```sh
-    go run main.go
-    ```
-
-Jika semua berjalan lancar, Anda akan melihat prompt dikirim dan jawaban dari Gemini dicetak di terminal ini.
+    `go run main.go`
+5.  Server sekarang berjalan dan siap menerima request di endpoint `/v1/chat/completions`.
 
 ---
 
-## Dokumentasi API Backend
+## Dokumentasi API Backend (Format OpenAI)
 
-Anda juga bisa berinteraksi dengan backend secara langsung menggunakan tool seperti Postman atau cURL.
+Untuk berinteraksi langsung dengan backend (misalnya via Postman atau cURL).
 
--   **Endpoint**: `/api/generate`
+-   **Endpoint**: `/v1/chat/completions`
 -   **Method**: `POST`
 -   **Headers**:
     -   `Content-Type`: `application/json`
-    -   `X-Client-Api-Key`: Kunci yang valid (contoh: `supersecret-client-key-123`, didefinisikan di `backend/main.go`).
+    -   *(Otentikasi `X-Client-Api-Key` sudah dihapus di versi ini)*
+
 -   **Request Body** (JSON):
+    Struktur body sekarang harus mengikuti format OpenAI. Field yang paling penting adalah `model` dan `messages`.
     ```json
     {
-        "prompt": "jelaskan apa itu blockchain dalam satu kalimat"
+      "model": "gemini-1.5-flash-latest",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Tulis sebuah lagu tentang bahasa pemrograman Go."
+        }
+      ]
     }
     ```
--   **Contoh cURL**:
-    ```sh
-    curl -X POST -H "Content-Type: application/json" -H "X-Client-Api-Key: supersecret-client-key-123" -d "{\"prompt\": \"jelaskan apa itu blockchain\"}" http://localhost:8080/api/generate
+
+-   **Success Response** (JSON):
+    Jika sukses, backend akan memberikan respons dalam format OpenAI.
+    ```json
+    {
+      "id": "chatcmpl-1716823888",
+      "object": "chat.completion",
+      "created": 1716823888,
+      "model": "gemini-1.5-flash-latest",
+      "choices": [
+        {
+          "index": 0,
+          "message": {
+            "role": "assistant",
+            "content": "(Verse 1)\nKetik `package main`, dunia menyapa..."
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    }
     ```
 
-### Respons
-
--   **200 OK**: Jika sukses, Anda akan menerima respons JSON langsung dari Gemini API.
--   **401 Unauthorized**: Jika `X-Client-Api-Key` salah atau tidak ada.
--   **400 Bad Request**: Jika body JSON salah format atau field `prompt` kosong.
--   **500 Internal Server Error**: Jika backend gagal menghubungi Google atau ada masalah internal lainnya.
-
----
-
-## Menggunakan Library `omnic`
-
-Untuk menggunakan library ini di proyek Go lain (dalam modul yang sama), Anda bisa mengimpor dan menggunakannya seperti ini:
-
-```go
-package main
-
-import (
-    "fmt"
-    "log"
-    "goclientside/omnic" // Sesuaikan dengan nama modul Anda
-)
-
-func main() {
-    // Konfigurasi client
-    backendURL := "http://localhost:8080"
-    clientAPIKey := "supersecret-client-key-123"
-
-    // Buat client baru
-    client := omnic.NewClient(backendURL, clientAPIKey)
-
-    // Panggil methodnya
-    text, err := client.GenerateContent("prompt Anda di sini")
-    if err != nil {
-        log.Fatalf("Error: %v", err)
-    }
-
-    fmt.Println(text)
-}
-```
+-   **Error Responses**:
+    -   `400 Bad Request`: Jika body JSON yang dikirim tidak sesuai format.
+    -   `500 Internal Server Error`: Jika terjadi kesalahan saat backend berkomunikasi dengan Google Gemini.

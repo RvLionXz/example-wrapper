@@ -2,27 +2,38 @@ package main
 
 import (
 	"fmt"
-	"log"
-
 	"goclientside/omnic"
+	"log"
 )
 
 func main() {
-	backendURL := "http://localhost:8080"
-	clientAPIKey := "supersecret-client-key-123"
+	baseURL := "http://localhost:8080"
 
-	client := omnic.NewClient(backendURL, clientAPIKey)
+	client := omnic.NewClient(baseURL)
 
-	prompt := "Jelaskan apa itu goroutine dalam satu kalimat"
+	request := omnic.OpenAIRequest{
+		Model: "gemini-1.5-flash-latest",
+		Messages: []omnic.OpenAIMessage{
+			{
+				Role:    "user",
+				Content: "Apa itu bahasa pemrograman Go? Jelaskan dalam satu paragraf singkat.",
+			},
+		},
+	}
 
-	fmt.Printf("-> Mengirim prompt: \"%s\"...\n\n", prompt)
+	fmt.Println("-> Mengirim Request...")
 
-	generatedText, err := client.GenerateContent(prompt)
+	response, err := client.GenerateContent(request)
 
 	if err != nil {
 		log.Fatalf("ERROR: Gagal mendapatkan jawaban dari backend: %v", err)
 	}
 
-	fmt.Println("---\n JAWABAN ---")
-	fmt.Println(generatedText)
+	if len(response.Choices) > 0 {
+		fmt.Println("--- Jawaban dari Server ---")
+		fmt.Println(response.Choices[0].Message.Content)
+	} else {
+		fmt.Println("Tidak ada jawaban yang diterima dari server.")
+	}
+
 }

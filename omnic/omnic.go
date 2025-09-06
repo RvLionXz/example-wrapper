@@ -9,87 +9,71 @@ import (
 
 type Client struct {
 	baseURL    string
-	apiKey     string
 	httpClient *http.Client
 }
 
-
-
-func NewClient(baseURL, apiKey string) *Client {
-
+func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL:    baseURL,
-		apiKey:     apiKey,
 		httpClient: &http.Client{},
 	}
-	
 }
 
-
-
-
-
-
-type backendRequest struct {
-	Prompt string `json:"prompt"`
+type OpenAIMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-type Part struct {
-	Text string `json:"text"`
+type OpenAIRequest struct {
+	Model    string          `json:"model"`
+	Messages []OpenAIMessage `json:"messages"`
 }
 
-type Content struct {
-	Parts []Part `json:"parts"`
+type Choice struct {
+	Index        int           `json:"index"`
+	Message      OpenAIMessage `json:"message"`
+	FinishReason string        `json:"finish_reason"`
 }
 
-type Candidate struct {
-	Content Content `json:"content"`
+type OpenAIResponse struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
 }
 
-type backendResponse struct {
-	Candidates []Candidate `json:"candidates"`
-}
+func (c *Client) GenerateContent(request OpenAIRequest) (*OpenAIResponse, error) {
 
-
-func (c *Client) GenerateContent(prompt string) (string, error) {
-	reqData := backendRequest{Prompt: prompt}
-	jsonBody, err := json.Marshal(reqData)
-
+	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return "", fmt.Errorf("gagal membuat json request: %w", err)
+		return nil, fmt.Errorf("gagal mengubah request ke json: %w", err)
 	}
 
-	fullURL := c.baseURL + "/api/generate"
-	req, err := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonBody))
-
+	URL := c.baseURL + "/v1/chat/completions"
+	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return "", fmt.Errorf("gagal membuat http request: %w", err)
+		return nil, fmt.Errorf("request gagal: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Client-Api-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
-
 	if err != nil {
-		return "", fmt.Errorf("gagal mengirim request server: %w", err)
+		return nil, fmt.Errorf("gagal melakukan request: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("error dari server, status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("server memberikan error dengan status code: %d", resp.StatusCode)
 	}
 
-	var backendResp backendResponse
+	var openAIResp OpenAIResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&backendResp); err != nil {
-		return "", fmt.Errorf("gagal decode json response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
+		return nil, fmt.Errorf("gagal decode respon json: %w", err)
 	}
 
-	if len(backendResp.Candidates) > 0 && len(backendResp.Candidates[0].Content.Parts) > 0 {
-		return backendResp.Candidates[0].Content.Parts[0].Text, nil
-	}
+	return &openAIResp, nil
 
-	return "", fmt.Errorf("tidak ada content di dalam response")
 }

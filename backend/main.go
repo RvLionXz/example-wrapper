@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// --- Structs untuk Format OpenAI (Request dari Client) ---
-
+// Structs untuk request/response format OpenAI
 type OpenAIRequest struct {
 	Model    string          `json:"model"`
 	Messages []OpenAIMessage `json:"messages"`
@@ -22,8 +21,6 @@ type OpenAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
-
-// --- Structs untuk Format OpenAI (Response ke Client) ---
 
 type OpenAIResponse struct {
 	ID      string   `json:"id"`
@@ -39,8 +36,7 @@ type Choice struct {
 	FinishReason string        `json:"finish_reason"`
 }
 
-// --- Structs Internal untuk Komunikasi dengan Google Gemini ---
-
+// Structs internal untuk komunikasi dengan Google Gemini
 type GeminiRequest struct {
 	Contents []Content `json:"contents"`
 }
@@ -63,11 +59,8 @@ type GeminiResponse struct {
 	} `json:"candidates"`
 }
 
-// --- FUNGSI WRAPPER UTAMA (PENERJEMAH) ---
-
+// chatCompletion adalah fungsi inti yang menjadi wrapper untuk Gemini API.
 func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, error) {
-	// 1. Ekstrak prompt dari format OpenAI.
-	// Untuk simulasi ini, kita ambil konten dari pesan terakhir.
 	var prompt string
 	if len(request.Messages) > 0 {
 		prompt = request.Messages[len(request.Messages)-1].Content
@@ -76,7 +69,6 @@ func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, erro
 		return nil, fmt.Errorf("prompt tidak boleh kosong")
 	}
 
-	// 2. Buat dan kirim request ke API Gemini (logika ini tetap sama).
 	geminiReqBody, err := json.Marshal(GeminiRequest{
 		Contents: []Content{{Parts: []Part{{Text: prompt}}}},
 	})
@@ -101,17 +93,16 @@ func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, erro
 		return nil, fmt.Errorf("gagal decode respons dari gemini: %w", err)
 	}
 
-	// 3. Terjemahkan respons dari format Gemini ke format OpenAI.
 	var responseText string
 	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
 		responseText = geminiResp.Candidates[0].Content.Parts[0].Text
 	}
 
 	openAIResp := OpenAIResponse{
-		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()), // Buat ID dummy
+		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
-		Model:   request.Model, // Kembalikan nama model yang diminta client
+		Model:   request.Model,
 		Choices: []Choice{
 			{
 				Index: 0,
@@ -127,8 +118,30 @@ func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, erro
 	return &openAIResp, nil
 }
 
-// --- HTTP Handlers ---
+// ClientRequest adalah struct untuk request yang datang dari client kita.
+type ClientRequest struct {
+	Prompt string `json:"prompt"`
+}
 
+// Kumpulan API Key yang valid untuk client.
+var clientKeys = map[string]bool{
+	"kunci-rahasia-client-A-123": true,
+	"kunci-rahasia-client-B-456": true,
+}
+
+// authMiddleware adalah penjaga pintu yang memeriksa API Key dari client.
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientKey := r.Header.Get("X-Client-Api-Key")
+		if _, valid := clientKeys[clientKey]; !valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handleChatRequest adalah jembatan antara HTTP request dan fungsi chatCompletion.
 func handleChatRequest(w http.ResponseWriter, r *http.Request) {
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 
@@ -149,17 +162,17 @@ func handleChatRequest(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(finalResp)
 }
 
-// --- MAIN FUNCTION ---
-
 func main() {
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		log.Fatal("Error: Environment variable GEMINI_API_KEY tidak di-set.")
 	}
 
-	http.HandleFunc("/v1/chat/completions", handleChatRequest)
+	// Buat handler utama dan bungkus dengan middleware otentikasi.
+	chatHandler := http.HandlerFunc(handleChatRequest)
+	http.Handle("/v1/chat/completions", authMiddleware(chatHandler))
 
 	port := "8080"
-	log.Printf("Server Simulasi OpenAI (v4) berjalan di port %s...", port)
+	log.Printf("Server v4 (dengan auth) berjalan di port %s...", port)
 	log.Println("Endpoint: POST http://localhost:8080/v1/chat/completions")
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("Gagal menjalankan server: %v", err)

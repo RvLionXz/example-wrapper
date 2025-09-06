@@ -19,7 +19,6 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-// Struc untuk request
 type OpenAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -30,7 +29,6 @@ type OpenAIRequest struct {
 	Messages []OpenAIMessage `json:"messages"`
 }
 
-// struc untuk respon
 type Choice struct {
 	Index        int           `json:"index"`
 	Message      OpenAIMessage `json:"message"`
@@ -45,40 +43,35 @@ type OpenAIResponse struct {
 	Choices []Choice `json:"choices"`
 }
 
-// method untuk request dan response (generate konten)
 func (c *Client) GenerateContent(request OpenAIRequest) (*OpenAIResponse, error) {
 
-	// encode struc -> json
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("Gagal mengubah request ke json: %w", err)
+		return nil, fmt.Errorf("gagal mengubah request ke json: %w", err)
 	}
 
-	// objek post request
 	URL := c.baseURL + "/v1/chat/completions"
 	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("request gagal", err)
+		return nil, fmt.Errorf("request gagal: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// mengirim request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Gagal melakukan request", err)
+		return nil, fmt.Errorf("gagal melakukan request: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Server memberikan error: ", resp.StatusCode)
+		return nil, fmt.Errorf("server memberikan error dengan status code: %d", resp.StatusCode)
 	}
 
-	// decode body json -> struc
 	var openAIResp OpenAIResponse
 
 	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
-		return nil, fmt.Errorf("Gagal decode respon json: ", err)
+		return nil, fmt.Errorf("gagal decode respon json: %w", err)
 	}
 
 	return &openAIResp, nil

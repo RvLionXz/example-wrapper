@@ -1,10 +1,12 @@
 package omnic
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Client struct {
@@ -13,70 +15,117 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(baseURL, apiKey string) *Client {
+func NewClient(baseURL, apikey string) *Client {
 	return &Client{
 		baseURL:    baseURL,
-		apiKey:     apiKey,
+		apiKey:     apikey,
 		httpClient: &http.Client{},
 	}
 }
 
-type OpenAIMessage struct {
+type OpenAiMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type OpenAIRequest struct {
+type OpenAiRequest struct {
 	Model    string          `json:"model"`
-	Messages []OpenAIMessage `json:"messages"`
+	Messages []OpenAiMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
 }
 
-type Choice struct {
-	Index        int           `json:"index"`
-	Message      OpenAIMessage `json:"message"`
-	FinishReason string        `json:"finish_reason"`
+type Choices struct {
+	Index        int             `json:"index"`
+	Messages     []OpenAiMessage `json:"messages"`
+	FinishReason string          `json:"finish_reason"`
 }
 
-type OpenAIResponse struct {
-	ID      string   `json:"id"`
-	Object  string   `json:"object"`
-	Created int64    `json:"created"`
-	Model   string   `json:"model"`
-	Choices []Choice `json:"choices"`
+type OpenAiResponse struct {
+	ID      string    `json:"id"`
+	Object  string    `json:"object"`
+	Created int       `json:"created"`
+	Model   string    `json:"model"`
+	Choices []Choices `json:"choices"`
 }
 
-func (c *Client) GenerateContent(request OpenAIRequest) (*OpenAIResponse, error) {
+func (client *Client) GenerateContent(request OpenAiRequest) (<-chan string, error) {
 
+	request.Stream = true
+
+	// mengubah struc -> json
 	jsonBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("gagal mengubah request ke json: %w", err)
+		return nil, fmt.Errorf("gagal mengubah struc ke json: %w", err)
 	}
 
-	URL := c.baseURL + "/v1/chat/completions"
+	// membuat http request
+	URL := client.baseURL + "/v1/chat/completions"
 	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("request gagal: %w", err)
+		return nil, fmt.Errorf("gagal membuat http request: %w", err)
 	}
+
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Client-Api-Key", c.apiKey)
+	req.Header.Set("X-Client-Api-Key", client.apiKey)
 
-	resp, err := c.httpClient.Do(req)
+	// mengirim request ke server
+	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("gagal melakukan request: %w", err)
+		return nil, fmt.Errorf("gagal mengirim request ke server: %w", err)
 	}
 
-	defer resp.Body.Close()
+	// Mengirim data response.body dengan stream (go routine)
+	streamChan := make(chan string) // pipa untuk mengirim data string
+	go func() {
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server memberikan error dengan status code: %d", resp.StatusCode)
-	}
+		defer close(streamChan) // memastikan pipa pengirim ditutup ketika response selesai
+		defer resp.Body.Close() // memastikan koneksi ke server ditutup ketika response selesai
+		
 
-	var openAIResp OpenAIResponse
+		reader := bufio.NewScanner(resp.Body)
 
-	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
-		return nil, fmt.Errorf("gagal decode respon json: %w", err)
-	}
+		for reader.Scan() {
+			line := reader.Text() // baca baris satu per satu
 
-	return &openAIResp, nil
+			// buat kondisi untuk mengecek baris yg kosong
+			if line == "" {
+				continue
+			}
 
+			jsonData := strings.TrimPrefix(line, "data: ") // kita buang prefix "data :"
+			// buat kondisi berhenti ketika server selesai mengirim sinyal
+			if jsonData == "[DONE]" {
+				break
+			}
+
+			// membuat struct sementara untuk kita parsing sebagai potongan potongan json
+			type Delta struct {
+				Content string `json:"content"`
+			}
+
+			type StreamChoice struct {
+				Delta Delta `json:"delta"`
+			}
+
+			type StreamResponse struct {
+				Choices []StreamChoice `json:"choices"`
+			}
+
+			// membuat variable streamResp dengan tipe StreamResponse
+			var streamResp StreamResponse
+			// parsing json ke struct kemudian konversi ke byte
+			err := json.Unmarshal([]byte(jsonData), &streamResp)
+			if err != nil {
+				continue
+			}
+
+			// cek jika ada teks di potongan data streamResp maka masukan teks tersebut kedalam streamChan
+			if len(streamResp.Choices) > 0 {
+				streamChan <- streamResp.Choices[0].Delta.Content
+			}
+
+		}
+	}()
+
+	return streamChan, nil
 }

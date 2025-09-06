@@ -7,34 +7,30 @@ import (
 )
 
 func main() {
-	baseURL := "http://localhost:8080"
+	baseURl := "http://localhost:8080"
 	apiKey := "kunci-rahasia-client-A-123"
 
-	client := omnic.NewClient(baseURL, apiKey)
+	client := omnic.NewClient(baseURl, apiKey)
 
-	request := omnic.OpenAIRequest{
+	request := omnic.OpenAiRequest{
 		Model: "gemini-1.5-flash-latest",
-		Messages: []omnic.OpenAIMessage{
-			{
+		Messages: []omnic.OpenAiMessage{
+			omnic.OpenAiMessage{
 				Role:    "user",
-				Content: "Apa itu bahasa pemrograman Go? Jelaskan dalam satu paragraf singkat.",
+				Content: "Halo saya baru belajar bahasa golangn",
 			},
 		},
+		Stream: true,
 	}
-
-	fmt.Println("-> Mengirim Request...")
 
 	response, err := client.GenerateContent(request)
 
 	if err != nil {
-		log.Fatalf("ERROR: Gagal mendapatkan jawaban dari backend: %v", err)
+		log.Fatal("ERROR: gagal mendapatkan jawaban dari server: %w", err)
 	}
 
-	if len(response.Choices) > 0 {
-		fmt.Println("--- Jawaban dari Server ---")
-		fmt.Println(response.Choices[0].Message.Content)
-	} else {
-		fmt.Println("Tidak ada jawaban yang diterima dari server.")
+	for textChunk := range response {
+		fmt.Print(textChunk)
+		fmt.Println()
 	}
-
 }

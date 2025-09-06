@@ -9,12 +9,14 @@ import (
 
 type Client struct {
 	baseURL    string
+	apiKey     string
 	httpClient *http.Client
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL:    baseURL,
+		apiKey:     apiKey,
 		httpClient: &http.Client{},
 	}
 }
@@ -56,6 +58,7 @@ func (c *Client) GenerateContent(request OpenAIRequest) (*OpenAIResponse, error)
 		return nil, fmt.Errorf("request gagal: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Client-Api-Key", c.apiKey)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

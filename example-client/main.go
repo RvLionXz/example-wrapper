@@ -8,8 +8,9 @@ import (
 
 func main() {
 	baseURL := "http://localhost:8080"
+	apiKey := "kunci-rahasia-client-A-123"
 
-	client := omnic.NewClient(baseURL)
+	client := omnic.NewClient(baseURL, apiKey)
 
 	request := omnic.OpenAIRequest{
 		Model: "gemini-1.5-flash-latest",

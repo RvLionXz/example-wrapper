@@ -1,20 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"time"
+	"strings"
 )
 
-// Structs untuk request/response format OpenAI
+// Structs untuk menerima request dari client (format OpenAI)
 type OpenAIRequest struct {
 	Model    string          `json:"model"`
 	Messages []OpenAIMessage `json:"messages"`
+	Stream   bool            `json:"stream"` // Menandakan apakah client meminta streaming
 }
 
 type OpenAIMessage struct {
@@ -22,21 +23,7 @@ type OpenAIMessage struct {
 	Content string `json:"content"`
 }
 
-type OpenAIResponse struct {
-	ID      string   `json:"id"`
-	Object  string   `json:"object"`
-	Created int64    `json:"created"`
-	Model   string   `json:"model"`
-	Choices []Choice `json:"choices"`
-}
-
-type Choice struct {
-	Index        int           `json:"index"`
-	Message      OpenAIMessage `json:"message"`
-	FinishReason string        `json:"finish_reason"`
-}
-
-// Structs internal untuk komunikasi dengan Google Gemini
+// Structs internal untuk mengirim request ke Google Gemini
 type GeminiRequest struct {
 	Contents []Content `json:"contents"`
 }
@@ -49,99 +36,7 @@ type Part struct {
 	Text string `json:"text"`
 }
 
-type GeminiResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
-// chatCompletion adalah fungsi inti yang menjadi wrapper untuk Gemini API.
-func chatCompletion(request OpenAIRequest, apiKey string) (*OpenAIResponse, error) {
-	var prompt string
-	if len(request.Messages) > 0 {
-		prompt = request.Messages[len(request.Messages)-1].Content
-	}
-	if prompt == "" {
-		return nil, fmt.Errorf("prompt tidak boleh kosong")
-	}
-
-	geminiReqBody, err := json.Marshal(GeminiRequest{
-		Contents: []Content{{Parts: []Part{{Text: prompt}}}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("gagal marshal request ke gemini: %w", err)
-	}
-
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(geminiReqBody))
-	if err != nil {
-		return nil, fmt.Errorf("gagal mengirim request ke gemini: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini merespons dengan error %d: %s", resp.StatusCode, string(body))
-	}
-
-	var geminiResp GeminiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, fmt.Errorf("gagal decode respons dari gemini: %w", err)
-	}
-
-	var responseText string
-	if len(geminiResp.Candidates) > 0 && len(geminiResp.Candidates[0].Content.Parts) > 0 {
-		responseText = geminiResp.Candidates[0].Content.Parts[0].Text
-	}
-
-	openAIResp := OpenAIResponse{
-		ID:      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
-		Object:  "chat.completion",
-		Created: time.Now().Unix(),
-		Model:   request.Model,
-		Choices: []Choice{
-			{
-				Index: 0,
-				Message: OpenAIMessage{
-					Role:    "assistant",
-					Content: responseText,
-				},
-				FinishReason: "stop",
-			},
-		},
-	}
-
-	return &openAIResp, nil
-}
-
-// ClientRequest adalah struct untuk request yang datang dari client kita.
-type ClientRequest struct {
-	Prompt string `json:"prompt"`
-}
-
-// Kumpulan API Key yang valid untuk client.
-var clientKeys = map[string]bool{
-	"kunci-rahasia-client-A-123": true,
-	"kunci-rahasia-client-B-456": true,
-}
-
-// authMiddleware adalah penjaga pintu yang memeriksa API Key dari client.
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clientKey := r.Header.Get("X-Client-Api-Key")
-		if _, valid := clientKeys[clientKey]; !valid {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// handleChatRequest adalah jembatan antara HTTP request dan fungsi chatCompletion.
+// handleChatRequest menangani semua logika, termasuk streaming.
 func handleChatRequest(w http.ResponseWriter, r *http.Request) {
 	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
 
@@ -151,15 +46,67 @@ func handleChatRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	finalResp, err := chatCompletion(openAIReq, geminiAPIKey)
+	var prompt string
+	if len(openAIReq.Messages) > 0 {
+		prompt = openAIReq.Messages[len(openAIReq.Messages)-1].Content
+	}
+	if prompt == "" {
+		http.Error(w, "Bad Request: Prompt tidak boleh kosong.", http.StatusBadRequest)
+		return
+	}
+
+	// Siapkan request untuk Gemini
+	geminiReqBody, err := json.Marshal(GeminiRequest{
+		Contents: []Content{{Parts: []Part{{Text: prompt}}}},
+	})
 	if err != nil {
-		log.Printf("Error dari fungsi chatCompletion: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(finalResp)
+	// Gunakan endpoint :streamGenerateContent untuk streaming
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=" + geminiAPIKey
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(geminiReqBody))
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Kirim request ke Gemini
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Set header untuk client agar tahu ini adalah stream
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// Siapkan flusher untuk mendorong data ke client secara real-time
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming tidak didukung!", http.StatusInternalServerError)
+		return
+	}
+
+	// Baca response stream dari Gemini baris per baris
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			// Kirim data mentah (chunk) ke client
+			fmt.Fprintf(w, "%s\n\n", line)
+			flusher.Flush() // Dorong data ke client saat itu juga
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error membaca stream dari Gemini: %v", err)
+	}
 }
 
 func main() {
@@ -167,12 +114,10 @@ func main() {
 		log.Fatal("Error: Environment variable GEMINI_API_KEY tidak di-set.")
 	}
 
-	// Buat handler utama dan bungkus dengan middleware otentikasi.
-	chatHandler := http.HandlerFunc(handleChatRequest)
-	http.Handle("/v1/chat/completions", authMiddleware(chatHandler))
+	http.HandleFunc("/v1/chat/completions", handleChatRequest)
 
 	port := "8080"
-	log.Printf("Server v4 (dengan auth) berjalan di port %s...", port)
+	log.Printf("Server Streaming (v5) berjalan di port %s...", port)
 	log.Println("Endpoint: POST http://localhost:8080/v1/chat/completions")
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("Gagal menjalankan server: %v", err)

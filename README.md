@@ -1,8 +1,8 @@
-# Proyek Wrapper API Gemini (Format OpenAI)
+# Proyek Wrapper API Gemini (Format Gemini)
 
 ## Ringkasan
 
-Versi terbaru dari proyek ini berfungsi sebagai **server proxy yang meniru antarmuka (interface) dari OpenAI API dan mendukung streaming**. Di belakang layar, ia tetap menggunakan Google Gemini sebagai model pemrosesnya.
+Versi terbaru dari proyek ini berfungsi sebagai **server proxy yang meniru antarmuka (interface) dari Gemini API dan mendukung streaming**. Di belakang layar, ia tetap menggunakan Google Gemini sebagai model pemrosesnya.
 
 ---
 
@@ -12,7 +12,7 @@ Versi terbaru dari proyek ini berfungsi sebagai **server proxy yang meniru antar
 
 ---
 
-## Dokumentasi API Backend (Format OpenAI)
+## Dokumentasi API Backend (Format Gemini)
 
 Untuk berinteraksi langsung dengan backend (misalnya via Postman atau cURL).
 
@@ -23,7 +23,7 @@ Untuk berinteraksi langsung dengan backend (misalnya via Postman atau cURL).
 
 ### Request Body (JSON)
 
-Struktur body mengikuti format OpenAI. Untuk mengaktifkan streaming, tambahkan field `"stream": true`.
+Struktur body mengikuti format Gemini. Untuk mengaktifkan streaming, tambahkan field `"stream": true`.
 
 **Contoh Request Streaming:**
 ```json

@@ -7,30 +7,27 @@ import (
 )
 
 func main() {
-	baseURl := "http://localhost:8080"
-	apiKey := "kunci-rahasia-client-A-123"
 
-	client := omnic.NewClient(baseURl, apiKey)
+	client := omnic.NewClient("http://localhost:8080")
 
-	request := omnic.OpenAiRequest{
+	apiRequest := omnic.APIRequest{
 		Model: "gemini-1.5-flash-latest",
-		Messages: []omnic.OpenAiMessage{
-			omnic.OpenAiMessage{
+		Messages: []omnic.Message{
+			{
 				Role:    "user",
-				Content: "Halo saya baru belajar bahasa golangn",
+				Content: "Apa itu goroutine di Go? Jelaskan seolah saya anak 5 tahun.",
 			},
 		},
-		Stream: true,
+		Stream: false,
 	}
 
-	response, err := client.GenerateContent(request)
-
+	streamChan, err := client.ChatCompletionCreate(apiRequest)
 	if err != nil {
-		log.Fatal("ERROR: gagal mendapatkan jawaban dari server: %w", err)
+		log.Fatalf("ERROR: Gagal memulai koneksi stream: %v", err)
 	}
 
-	for textChunk := range response {
+	for textChunk := range streamChan {
 		fmt.Print(textChunk)
-		fmt.Println()
 	}
+
 }

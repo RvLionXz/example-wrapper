@@ -1,0 +1,35 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Hujan turun rintik-rintik,\nMenari lembut di atas bumi.\nMembasuh debu dan kekeringan,\nMemberi kehidupan pada yang mati.\n\nTetes demi tetes,\nMenciptakan alunan merdu.\nSuara alam yang menenangkan,\nMenyembuhkan luka di hati.\n"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "avgLogprobs": -0.50433952220972034
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 8,
+    "candidatesTokenCount": 69,
+    "totalTokenCount": 77,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 8
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 69
+      }
+    ]
+  },
+  "modelVersion": "gemini-1.5-flash-latest",
+  "responseId": "Xu6_aOvxGf2dz7IP5Lv1-A0"
+}

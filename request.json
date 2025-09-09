@@ -1,0 +1,11 @@
+{
+  "model": "gemini-1.5-flash-latest",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tulis sebuah cerita pendek tentang robot yang belajar melukis."
+    }
+  ],
+  "stream": true,
+  "temperature": 0.8
+}

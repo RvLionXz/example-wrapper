@@ -122,7 +122,9 @@ func handleChatRequest(w http.ResponseWriter, r *http.Request) {
 
 			openAIChunk := OpenAIStreamResponse{
 				Choices: []OpenAIStreamChoice{
-					{Delta: struct{ Content string `json:"content"` }{Content: textChunk}},
+					{Delta: struct {
+						Content string `json:"content"`
+					}{Content: textChunk}},
 				},
 			}
 

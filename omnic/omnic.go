@@ -80,7 +80,6 @@ func (client *Client) GenerateContent(request OpenAiRequest) (<-chan string, err
 
 		defer close(streamChan) // memastikan pipa pengirim ditutup ketika response selesai
 		defer resp.Body.Close() // memastikan koneksi ke server ditutup ketika response selesai
-		
 
 		reader := bufio.NewScanner(resp.Body)
 

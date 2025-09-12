@@ -17,14 +17,15 @@ Proyek ini adalah sebuah sistem client-server lengkap yang ditulis dalam Go. Tuj
 
 ```
 goclientside/
-├── backend/              # Kode server backend
-│   └── main.go
-├── omnic/                # Kode library client (wrapper)
+├── backend/
+│   ├── cmd/api/main.go     # Titik masuk (entrypoint) server
+│   └── internal/           # Logika internal backend (handlers, services, models)
+├── omnic/                  # Kode library client (wrapper)
 │   └── omnic.go
-├── example-client/       # Contoh program yang menggunakan library omnic
+├── example-client/         # Contoh program yang menggunakan library omnic
 │   └── main.go
-├── go.mod                # File manajemen modul Go
-└── README.md             # Dokumentasi ini
+├── go.mod                  # File manajemen modul Go
+└── README.md               # Dokumentasi ini
 ```
 
 ---
@@ -42,13 +43,15 @@ replace goclientside/omnic => ./omnic
 
 ### 2. Menjalankan Backend Server
 
-1.  **Buka Terminal 1**.
-2.  Pindah ke direktori `backend`: `cd backend`
-3.  Set environment variable untuk API Key Gemini Anda:
+1.  **Buka Terminal 1** di direktori **root** proyek.
+2.  Set environment variable untuk API Key Gemini Anda:
     *   Di PowerShell: `$env:GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
     *   Di bash: `export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
-4.  Jalankan server: `go run main.go`
-5.  Biarkan terminal ini berjalan.
+3.  Jalankan server dengan perintah berikut dari root:
+    ```bash
+    go run backend/cmd/api/main.go
+    ```
+4.  Biarkan terminal ini berjalan.
 
 ### 3. Menjalankan Example Client
 

@@ -15,10 +15,10 @@ func main() {
 		Messages: []omnic.Message{
 			{
 				Role:    "user",
-				Content: "Apa itu goroutine di Go? Jelaskan seolah saya anak 5 tahun.",
+				Content: "Apa itu goroutine di Go?",
 			},
 		},
-		Stream: false,
+		Stream: true,
 	}
 
 	streamChan, err := client.ChatCompletionCreate(apiRequest)

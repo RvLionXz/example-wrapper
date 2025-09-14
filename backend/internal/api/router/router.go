@@ -16,6 +16,8 @@ func SetupRouter() *gin.Engine {
 	{
 		// Endpoint untuk chat completions
 		v1.POST("/chat/completions", handler.ChatCompletions)
+		// Endpoint untuk embeddings
+		v1.POST("/embeddings", handler.CreateEmbedding)
 	}
 
 	return r

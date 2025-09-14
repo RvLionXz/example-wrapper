@@ -85,7 +85,73 @@ replace goclientside/omnic => ./omnic
     -   **Logika Pesan**: Proxy ini menyederhanakan riwayat percakapan. Hanya konten dari pesan terakhir dengan `role: "user"` yang akan digunakan sebagai *prompt* untuk Gemini.
     -   **Temperature**: Jika parameter `temperature` tidak disertakan dalam *request*, nilai *default* `0.7` akan digunakan.
 
----
+### Endpoint Embeddings
+
+-   **Endpoint**: `POST /v1/embeddings`
+-   **Request Body (JSON)**:
+    ```json
+    {
+      "model": "embedding-001",
+      "input": "Teks yang akan di-embed."
+    }
+    ```
+-   **Response Body (JSON)**:
+    ```json
+    {
+      "object": "list",
+      "data": [
+        {
+          "object": "embedding",
+          "embedding": [
+            0.012345,
+            -0.067890,
+            ...
+          ],
+          "index": 0
+        }
+      ],
+      "model": "embedding-001"
+    }
+    ```
+
+## Cara Menguji Endpoint
+
+Anda dapat menggunakan alat baris perintah seperti `curl` untuk menguji endpoint API secara langsung. Pastikan server backend Anda sedang berjalan sebelum menjalankan perintah ini.
+
+### Menguji Endpoint `/v1/embeddings`
+
+```bash
+curl -X POST http://localhost:8080/v1/embeddings \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "embedding-001",
+  "input": "Halo, dunia!"
+}'
+```
+
+### Menguji Endpoint `/v1/chat/completions`
+
+**Non-Streaming:**
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemini-1.5-flash-latest",
+  "messages": [{"role": "user", "content": "Apa itu Go?"}],
+  "stream": false
+}'
+```
+
+**Streaming:**
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+-H "Content-Type: application/json" \
+-d '{
+  "model": "gemini-1.5-flash-latest",
+  "messages": [{"role": "user", "content": "Ceritakan sebuah lelucon."}],
+  "stream": true
+}'
+```
 
 ## Penjelasan Wrapper Library (`omnic`)
 

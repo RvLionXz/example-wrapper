@@ -1,27 +1,24 @@
 package main
 
 import (
-	"goclientside/backend/internal/handler"
+	"goclientside/backend/internal/api/router"
 	"log"
-	"net/http"
 	"os"
 )
 
 func main() {
-	// Pastikan API key sudah di-set sebelum memulai server
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		log.Fatal("Environment variable GEMINI_API_KEY tidak di-set.")
 	}
 
-	// Daftarkan handler untuk endpoint kita
-	http.HandleFunc("/v1/chat/completions", handler.ChatCompletions)
+	// Setup router dari package router
+	r := router.SetupRouter()
 
 	port := "8080"
-	log.Printf("Server berjalan di port %s...", port)
-	log.Println("Endpoint: POST http://localhost:8080/v1/chat/completions")
+	log.Printf("Server Gin berjalan di port %s...", port)
 
 	// Jalankan server
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatalf("Gagal menjalankan server: %v", err)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("Gagal menjalankan server Gin: %v", err)
 	}
 }

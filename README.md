@@ -81,6 +81,9 @@ replace goclientside/omnic => ./omnic
 -   **Response Body**: Responsnya adalah **respons mentah dari Google Gemini API**. Bentuknya tergantung pada nilai `stream`:
     -   Jika `"stream": false`, responsnya adalah satu objek JSON besar: `{"candidates":[...]}`.
     -   Jika `"stream": true`, responsnya adalah aliran data (stream) Server-Sent Events: `data: {"candidates":[...]}`.
+-   **Detail Implementasi**:
+    -   **Logika Pesan**: Proxy ini menyederhanakan riwayat percakapan. Hanya konten dari pesan terakhir dengan `role: "user"` yang akan digunakan sebagai *prompt* untuk Gemini.
+    -   **Temperature**: Jika parameter `temperature` tidak disertakan dalam *request*, nilai *default* `0.7` akan digunakan.
 
 ---
 

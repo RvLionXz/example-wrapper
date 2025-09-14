@@ -1,6 +1,6 @@
 package model
 
-// APIRequest adalah struktur untuk request yang masuk ke proxy server kita.
+// APIRequest adalah struktur untuk request yang masuk dari client.
 type APIRequest struct {
 	Model       string    `json:"model"`
 	Messages    []Message `json:"messages"`

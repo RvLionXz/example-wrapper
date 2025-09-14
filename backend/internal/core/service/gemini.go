@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"goclientside/backend/internal/model"
+	"goclientside/backend/internal/core/model"
 	"net/http"
 )
 
 // CallGeminiAPI membuat dan mengirim request ke Google Gemini API.
 func CallGeminiAPI(apiKey string, apiReq model.APIRequest) (*http.Response, error) {
 	var prompt string
-	// Mengambil konten user terakhir sebagai prompt
 	for i := len(apiReq.Messages) - 1; i >= 0; i-- {
 		if apiReq.Messages[i].Role == "user" {
 			prompt = apiReq.Messages[i].Content
@@ -23,7 +22,6 @@ func CallGeminiAPI(apiKey string, apiReq model.APIRequest) (*http.Response, erro
 		Contents: []model.Content{{Parts: []model.Part{{Text: prompt}}}},
 	}
 
-	// Atur temperature, gunakan default jika tidak dispesifikasikan
 	if apiReq.Temperature != nil {
 		geminiReq.GenerationConfig = &model.GenerationConfig{Temperature: apiReq.Temperature}
 	} else {
@@ -36,7 +34,6 @@ func CallGeminiAPI(apiKey string, apiReq model.APIRequest) (*http.Response, erro
 		return nil, fmt.Errorf("gagal marshal request gemini: %w", err)
 	}
 
-	// Tentukan endpoint berdasarkan parameter stream
 	var endpoint string
 	if apiReq.Stream {
 		endpoint = "streamGenerateContent"
@@ -55,6 +52,5 @@ func CallGeminiAPI(apiKey string, apiReq model.APIRequest) (*http.Response, erro
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Kirim request
 	return http.DefaultClient.Do(req)
 }

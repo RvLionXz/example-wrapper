@@ -49,7 +49,7 @@ replace goclientside/omnic => ./omnic
     *   Di bash: `export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"`
 3.  Jalankan server dengan perintah berikut dari root:
     ```bash
-    go run backend/cmd/api/main.go
+    cd backend && go run cmd/api/main.go
     ```
 4.  Biarkan terminal ini berjalan.
 
@@ -91,26 +91,26 @@ replace goclientside/omnic => ./omnic
 -   **Request Body (JSON)**:
     ```json
     {
-      "model": "embedding-001",
-      "input": "Teks yang akan di-embed."
+      "model": "models/gemini-embedding-001",
+      "content": {
+        "parts": [
+          {
+            "text": "Teks yang akan di-embed."
+          }
+        ]
+      }
     }
     ```
 -   **Response Body (JSON)**:
     ```json
     {
-      "object": "list",
-      "data": [
-        {
-          "object": "embedding",
-          "embedding": [
-            0.012345,
-            -0.067890,
-            ...
-          ],
-          "index": 0
-        }
-      ],
-      "model": "embedding-001"
+      "embedding": {
+        "values": [
+          0.012345,
+          -0.067890,
+          ...
+        ]
+      }
     }
     ```
 
@@ -124,8 +124,14 @@ Anda dapat menggunakan alat baris perintah seperti `curl` untuk menguji endpoint
 curl -X POST http://localhost:8080/v1/embeddings \
 -H "Content-Type: application/json" \
 -d '{
-  "model": "embedding-001",
-  "input": "Halo, dunia!"
+  "model": "models/gemini-embedding-001",
+  "content": {
+    "parts": [
+      {
+        "text": "Halo, dunia!"
+      }
+    ]
+  }
 }'
 ```
 
